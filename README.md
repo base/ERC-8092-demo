@@ -1,6 +1,6 @@
 # ERC-8092 Demo
 
-A Next.js demo for [ERC-8092](https://github.com/ethereum/ERCs/pull/1049) wallet associations.
+A Next.js demo for [ERC-8092](https://github.com/ethereum/ERCs/pull/1049) Associated Accounts.
 
 ## Install
 
