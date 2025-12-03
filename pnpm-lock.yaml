@@ -17,6 +17,9 @@ importers:
       '@wonderland/interop-addresses':
         specifier: ^0.1.0
         version: 0.1.0(typescript@5.9.3)
+      cytoscape:
+        specifier: ^3.33.1
+        version: 3.33.1
       next:
         specifier: 16.0.7
         version: 16.0.7(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -593,6 +596,10 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  cytoscape@3.33.1:
+    resolution: {integrity: sha512-iJc4TwyANnOGR1OmWhsS9ayRS3s+XQ185FmuHObThD+5AeJCakAAbWv8KimMTt08xCCLNgneQwFp+JRJOr9qGQ==}
+    engines: {node: '>=0.10'}
 
   dedent@0.7.0:
     resolution: {integrity: sha512-Q6fKUPqnAHAyhiUgFU7BUzLiv0kd8saH9al7tnu5Q/okj6dnupxyTgFIBjVzJATdfIAm9NAsvXNzjaKa+bxVyA==}
@@ -1366,6 +1373,8 @@ snapshots:
       delayed-stream: 1.0.0
 
   csstype@3.2.3: {}
+
+  cytoscape@3.33.1: {}
 
   dedent@0.7.0: {}
 

@@ -91,6 +91,39 @@ export const associationsStoreAbi = [
     stateMutability: 'view',
   },
   {
+    type: 'function',
+    name: 'getAssociationsForAccount',
+    inputs: [{ name: 'account', type: 'bytes', internalType: 'bytes' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple[]',
+        internalType: 'struct AssociatedAccounts.SignedAssociationRecord[]',
+        components: [
+          { name: 'revokedAt', type: 'uint40', internalType: 'uint40' },
+          { name: 'initiatorKeyType', type: 'bytes2', internalType: 'bytes2' },
+          { name: 'approverKeyType', type: 'bytes2', internalType: 'bytes2' },
+          { name: 'initiatorSignature', type: 'bytes', internalType: 'bytes' },
+          { name: 'approverSignature', type: 'bytes', internalType: 'bytes' },
+          {
+            name: 'record',
+            type: 'tuple',
+            internalType: 'struct AssociatedAccounts.AssociatedAccountRecord',
+            components: [
+              { name: 'initiator', type: 'bytes', internalType: 'bytes' },
+              { name: 'approver', type: 'bytes', internalType: 'bytes' },
+              { name: 'validAt', type: 'uint40', internalType: 'uint40' },
+              { name: 'validUntil', type: 'uint40', internalType: 'uint40' },
+              { name: 'interfaceId', type: 'bytes4', internalType: 'bytes4' },
+              { name: 'data', type: 'bytes', internalType: 'bytes' },
+            ],
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
     type: 'event',
     name: 'AssociationCreated',
     inputs: [

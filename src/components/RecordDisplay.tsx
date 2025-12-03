@@ -146,7 +146,6 @@ export function RecordDisplay({ aar, sar }: RecordDisplayProps) {
           <div className="nested-record">
             <span className="field-label">record:</span>
             <span className="field-type">AssociatedAccountRecord</span>
-            <span className="nested-indicator">↑ See above</span>
           </div>
         </div>
       </div>

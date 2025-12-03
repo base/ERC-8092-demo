@@ -12,6 +12,7 @@
     "@neondatabase/serverless": "^1.0.2",
     "@tanstack/react-query": "latest",
     "@wonderland/interop-addresses": "^0.1.0",
+    "cytoscape": "^3.33.1",
     "next": "16.0.7",
     "react": "latest",
     "react-dom": "latest",

@@ -46,7 +46,8 @@ export function useDatabaseStorage({
             data: aar.data,
           },
           sar: {
-            revokedAt: sar.revokedAt.toString(),
+            // revokedAt must be 0 when storing a new association
+            revokedAt: '0',
             initiatorKeyType: sar.initiatorKeyType,
             approverKeyType: sar.approverKeyType,
             initiatorSignature: sar.initiatorSignature,

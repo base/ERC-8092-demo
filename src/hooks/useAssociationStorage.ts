@@ -78,8 +78,9 @@ export function useAssociationStorage({
     setError(null)
     
     // Build the contract struct matching the Solidity types
+    // Note: revokedAt must be 0 when storing a new association
     const contractSar = {
-      revokedAt: Number(sar.revokedAt),
+      revokedAt: 0,
       initiatorKeyType: keyTypeToBytes2(sar.initiatorKeyType),
       approverKeyType: keyTypeToBytes2(sar.approverKeyType),
       initiatorSignature: sar.initiatorSignature,

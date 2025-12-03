@@ -15,6 +15,10 @@ interface ControlPanelProps {
   setAar: (aar: AssociatedAccountRecord) => void
   sar: SignedAssociationRecord
   setSar: (sar: SignedAssociationRecord) => void
+  /** Callback when user takes a write action (to switch tabs) */
+  onWriteActivity?: () => void
+  /** Callback when association is stored (to refresh graph) */
+  onStoreComplete?: (storageMethod: 'onchain' | 'database') => void
 }
 
 export function ControlPanel({ 
@@ -23,7 +27,9 @@ export function ControlPanel({
   aar, 
   setAar, 
   sar, 
-  setSar 
+  setSar,
+  onWriteActivity,
+  onStoreComplete 
 }: ControlPanelProps) {
   // Local state
   const [approverInput, setApproverInput] = useState('')
@@ -185,6 +191,13 @@ export function ControlPanel({
     }
   }, [flowStep, isConnected, address, effectiveApproverAddress, awaitingApproverConnect, setFlowStep])
 
+  // Notify parent when store completes (to refresh graph)
+  useEffect(() => {
+    if (flowStep === 'complete' && onStoreComplete) {
+      onStoreComplete(storageMethod)
+    }
+  }, [flowStep, onStoreComplete, storageMethod])
+
   const handleSubmitApprover = () => {
     if (!initiatorAddress) {
       setError('Initiator address not set')
@@ -331,7 +344,7 @@ export function ControlPanel({
         {flowStep === 'connect-initiator' && (
           <div className="step-content">
             <p>Connect your Initiator wallet</p>
-            <button onClick={handleConnect} className="primary-btn">
+            <button onClick={() => { onWriteActivity?.(); handleConnect(); }} className="primary-btn">
               Connect Wallet
             </button>
           </div>
@@ -425,7 +438,7 @@ export function ControlPanel({
             )}
             
             <button 
-              onClick={handleSubmitApprover} 
+              onClick={() => { onWriteActivity?.(); handleSubmitApprover(); }} 
               className="primary-btn"
               disabled={isResolvingEns || isSameAsInitiator}
             >
@@ -438,7 +451,7 @@ export function ControlPanel({
           <div className="step-content">
             <p>Sign the association with your initiator wallet</p>
             <button 
-              onClick={handleSignInitiator} 
+              onClick={() => { onWriteActivity?.(); handleSignInitiator(); }} 
               className="primary-btn"
               disabled={isProcessing}
             >
@@ -465,7 +478,7 @@ export function ControlPanel({
           <div className="step-content">
             <p>Sign the association with your approver wallet</p>
             <button 
-              onClick={handleSignApprover} 
+              onClick={() => { onWriteActivity?.(); handleSignApprover(); }} 
               className="primary-btn"
               disabled={isProcessing}
             >
@@ -509,7 +522,7 @@ export function ControlPanel({
             </div>
 
             <button 
-              onClick={handleStoreAssociation} 
+              onClick={() => { onWriteActivity?.(); handleStoreAssociation(); }} 
               className="primary-btn"
               disabled={isStorePending}
             >
