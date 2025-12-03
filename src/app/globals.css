@@ -623,6 +623,93 @@ body {
   border-color: var(--text-muted);
 }
 
+/* Storage Method Selector */
+.storage-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.storage-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.storage-option:hover {
+  background: var(--bg-secondary);
+}
+
+.storage-option input[type="radio"] {
+  margin-top: 0.25rem;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.storage-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.storage-label strong {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.storage-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Association ID Display */
+.association-id {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.id-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.id-value {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--accent-secondary);
+  background: var(--bg-secondary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.storage-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
 .error-message {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);

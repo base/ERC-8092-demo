@@ -6,7 +6,7 @@ import { useEnsAddress } from 'wagmi'
 import { baseSepolia, mainnet } from 'wagmi/chains'
 import type { FlowStep, AssociatedAccountRecord, SignedAssociationRecord } from '@/lib/types'
 import { addressToErc7930 } from '@/lib/types'
-import { useWalletConnection, useAssociationSigning, useAssociationStorage, useAssociationRevocation } from '@/hooks'
+import { useWalletConnection, useAssociationSigning, useAssociationStorage, useDatabaseStorage, useAssociationRevocation, useDatabaseRevocation } from '@/hooks'
 
 interface ControlPanelProps {
   flowStep: FlowStep
@@ -31,6 +31,9 @@ export function ControlPanel({
   const [error, setError] = useState<string | null>(null)
   const [awaitingInitiatorConnect, setAwaitingInitiatorConnect] = useState(true)
   const [awaitingApproverConnect, setAwaitingApproverConnect] = useState(false)
+  
+  // Storage method selection
+  const [storageMethod, setStorageMethod] = useState<'onchain' | 'database'>('onchain')
   
   // Optional AAR fields
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -62,13 +65,7 @@ export function ControlPanel({
     setError,
   })
 
-  const {
-    txHash,
-    isWritePending,
-    isConfirming,
-    associationId,
-    handleStoreAssociation,
-  } = useAssociationStorage({
+  const onchainStorage = useAssociationStorage({
     aar,
     sar,
     flowStep,
@@ -76,13 +73,61 @@ export function ControlPanel({
     setError,
   })
 
+  const databaseStorage = useDatabaseStorage({
+    aar,
+    sar,
+    flowStep,
+    setFlowStep,
+    setError,
+  })
+
+  // Use the appropriate storage based on selection
+  const {
+    txHash,
+    isWritePending,
+    isConfirming,
+    associationId: onchainAssociationId,
+    handleStoreAssociation: handleStoreOnchain,
+  } = onchainStorage
+
+  const {
+    associationId: dbAssociationId,
+    isStoring,
+    handleStoreAssociation: handleStoreDatabase,
+  } = databaseStorage
+
+  // Unified storage handler
+  const handleStoreAssociation = storageMethod === 'onchain' 
+    ? handleStoreOnchain 
+    : handleStoreDatabase
+  
+  const isStorePending = storageMethod === 'onchain' 
+    ? (isWritePending || isConfirming) 
+    : isStoring
+  
+  const associationId = storageMethod === 'onchain' 
+    ? onchainAssociationId 
+    : (dbAssociationId?.toString() ?? null)
+
+  // Onchain revocation (uses Hex association ID)
   const {
     revokeTxHash,
     isRevokePending,
     isRevokeConfirming,
-    handleRevoke,
+    handleRevoke: handleOnchainRevoke,
   } = useAssociationRevocation({
-    associationId,
+    associationId: onchainAssociationId,
+    sar,
+    setSar,
+    setError,
+  })
+
+  // Database revocation (uses numeric ID, requires signature)
+  const {
+    isRevoking: isDbRevoking,
+    handleRevoke: handleDatabaseRevoke,
+  } = useDatabaseRevocation({
+    associationId: dbAssociationId,
     sar,
     setSar,
     setError,
@@ -215,6 +260,7 @@ export function ControlPanel({
     setDataInput('')
     setAwaitingInitiatorConnect(false)
     setAwaitingApproverConnect(false)
+    setStorageMethod('onchain')
     setAar({
       initiator: '0x',
       approver: '0x',
@@ -430,15 +476,49 @@ export function ControlPanel({
 
         {flowStep === 'store-association' && (
           <div className="step-content">
-            <p>Store the association onchain</p>
+            <p>Store the association</p>
+            
+            {/* Storage Method Selector */}
+            <div className="storage-selector">
+              <label className="storage-option">
+                <input
+                  type="radio"
+                  name="storageMethod"
+                  value="onchain"
+                  checked={storageMethod === 'onchain'}
+                  onChange={() => setStorageMethod('onchain')}
+                />
+                <span className="storage-label">
+                  <strong>Onchain</strong>
+                  <span className="storage-hint">Base Sepolia • Gas fees apply</span>
+                </span>
+              </label>
+              <label className="storage-option">
+                <input
+                  type="radio"
+                  name="storageMethod"
+                  value="database"
+                  checked={storageMethod === 'database'}
+                  onChange={() => setStorageMethod('database')}
+                />
+                <span className="storage-label">
+                  <strong>Database</strong>
+                  <span className="storage-hint">Centralized • No gas fees</span>
+                </span>
+              </label>
+            </div>
+
             <button 
               onClick={handleStoreAssociation} 
               className="primary-btn"
-              disabled={isWritePending || isConfirming}
+              disabled={isStorePending}
             >
-              {isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Storing...' : 'Store Association'}
+              {storageMethod === 'onchain' 
+                ? (isWritePending ? 'Confirm in Wallet...' : isConfirming ? 'Storing...' : 'Store Onchain')
+                : (isStoring ? 'Storing...' : 'Store in Database')
+              }
             </button>
-            {txHash && (
+            {storageMethod === 'onchain' && txHash && (
               <div className="tx-status">
                 <a 
                   href={`https://sepolia.basescan.org/tx/${txHash}`}
@@ -456,16 +536,34 @@ export function ControlPanel({
         {flowStep === 'complete' && (
           <div className="step-content">
             <p className="success">✓ Association complete!</p>
+            {associationId && (
+              <div className="association-id">
+                <span className="id-label">ID:</span>
+                <code className="id-value">
+                  {storageMethod === 'onchain' 
+                    ? `${associationId.slice(0, 10)}...${associationId.slice(-8)}`
+                    : associationId
+                  }
+                </code>
+                <span className="storage-badge">{storageMethod === 'onchain' ? 'Onchain' : 'Database'}</span>
+              </div>
+            )}
             {sar.revokedAt === 0n ? (
               <>
                 <button 
-                  onClick={() => handleRevoke()} 
+                  onClick={() => storageMethod === 'onchain' ? handleOnchainRevoke() : handleDatabaseRevoke()} 
                   className="danger-btn"
-                  disabled={isRevokePending || isRevokeConfirming}
+                  disabled={storageMethod === 'onchain' 
+                    ? (isRevokePending || isRevokeConfirming) 
+                    : isDbRevoking
+                  }
                 >
-                  {isRevokePending ? 'Confirm in Wallet...' : isRevokeConfirming ? 'Revoking...' : 'Revoke Association'}
+                  {storageMethod === 'onchain' 
+                    ? (isRevokePending ? 'Confirm in Wallet...' : isRevokeConfirming ? 'Revoking...' : 'Revoke Association')
+                    : (isDbRevoking ? 'Sign & Revoke...' : 'Revoke Association')
+                  }
                 </button>
-                {revokeTxHash && (
+                {storageMethod === 'onchain' && revokeTxHash && (
                   <div className="tx-status">
                     <a 
                       href={`https://sepolia.basescan.org/tx/${revokeTxHash}`}

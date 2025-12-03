@@ -1,0 +1,38 @@
+-- Create accounts table
+CREATE TABLE accounts (
+  address VARCHAR(255) PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create associations table
+CREATE TABLE associations (
+  id SERIAL PRIMARY KEY,
+  
+  -- Foreign keys to account addresses
+  initiator_address VARCHAR(255) NOT NULL REFERENCES accounts(address),
+  approver_address VARCHAR(255) NOT NULL REFERENCES accounts(address),
+  
+  -- AssociatedAccountRecord fields
+  initiator_bytes TEXT NOT NULL,
+  approver_bytes TEXT NOT NULL,
+  valid_at BIGINT NOT NULL,
+  valid_until BIGINT,
+  interface_id VARCHAR(10),
+  data TEXT,
+  
+  -- SignedAssociationRecord fields
+  revoked_at BIGINT,
+  initiator_key_type CHAR(6) NOT NULL,
+  approver_key_type CHAR(6) NOT NULL,
+  initiator_signature TEXT NOT NULL,
+  approver_signature TEXT NOT NULL,
+  
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for efficient querying
+CREATE INDEX initiator_idx ON associations(initiator_address);
+CREATE INDEX approver_idx ON associations(approver_address);
+CREATE INDEX valid_at_idx ON associations(valid_at);
+CREATE INDEX valid_until_idx ON associations(valid_until);
+CREATE INDEX revoked_at_idx ON associations(revoked_at);
