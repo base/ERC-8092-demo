@@ -1,4 +1,3 @@
-import { type Hex } from 'viem'
 import type { AssociatedAccountRecord } from './types'
 
 // EIP-712 Domain for Associated Accounts (from ERC-8092 spec)

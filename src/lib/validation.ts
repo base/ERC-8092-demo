@@ -1,6 +1,9 @@
-import { type Hex, verifyTypedData } from 'viem'
+import { type Hex, verifyTypedData, getAddress } from 'viem'
 import { EIP712_DOMAIN, ASSOCIATED_ACCOUNT_RECORD_TYPES } from './eip712'
 import type { AssociatedAccountRecord, SignedAssociationRecord } from './types'
+import { KEY_TYPES } from './types'
+import { verifyErc1271Signature, type Erc1271Client } from './erc1271'
+import { verifyErc6492Signature } from './erc6492'
 
 /**
  * ERC-8092 Validation
@@ -16,6 +19,8 @@ export interface ValidationInput {
   initiatorAddress: Hex
   /** Extracted EVM address of the approver (from ERC-7930 bytes) */
   approverAddress: Hex
+  /** Public client for ERC-1271/6492 validation (required for smart contract wallets) */
+  publicClient?: Erc1271Client
 }
 
 export interface ValidationResult {
@@ -34,9 +39,14 @@ export interface ValidationResult {
  *    preimage of the underlying `AssociatedAccountRecord`.
  * 5. If the `approverSignature` field is populated, the signature MUST be valid for the EIP-712 
  *    preimage of the underlying `AssociatedAccountRecord`.
+ * 
+ * Supported signature types:
+ * - K1 (secp256k1): Standard EOA signatures
+ * - ERC-1271: Smart contract wallet signatures (deployed contracts)
+ * - ERC-6492: Smart contract wallet signatures (undeployed/counterfactual contracts)
  */
 export async function validateAssociation(input: ValidationInput): Promise<ValidationResult> {
-  const { aar, sar, initiatorAddress, approverAddress } = input
+  const { aar, sar, initiatorAddress, approverAddress, publicClient } = input
   const now = BigInt(Math.floor(Date.now() / 1000))
 
   // 1. Current timestamp MUST be >= validAt
@@ -76,13 +86,13 @@ export async function validateAssociation(input: ValidationInput): Promise<Valid
 
   // 4. Validate initiator signature (if populated)
   if (sar.initiatorSignature && sar.initiatorSignature !== '0x') {
-    const isInitiatorValid = await verifyTypedData({
+    const isInitiatorValid = await verifySignature({
       address: initiatorAddress,
-      domain: EIP712_DOMAIN,
-      types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
-      primaryType: 'AssociatedAccountRecord',
-      message: eip712Message,
       signature: sar.initiatorSignature,
+      keyType: sar.initiatorKeyType,
+      aar,
+      eip712Message,
+      publicClient,
     })
 
     if (!isInitiatorValid) {
@@ -95,13 +105,13 @@ export async function validateAssociation(input: ValidationInput): Promise<Valid
 
   // 5. Validate approver signature (if populated)
   if (sar.approverSignature && sar.approverSignature !== '0x') {
-    const isApproverValid = await verifyTypedData({
+    const isApproverValid = await verifySignature({
       address: approverAddress,
-      domain: EIP712_DOMAIN,
-      types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
-      primaryType: 'AssociatedAccountRecord',
-      message: eip712Message,
       signature: sar.approverSignature,
+      keyType: sar.approverKeyType,
+      aar,
+      eip712Message,
+      publicClient,
     })
 
     if (!isApproverValid) {
@@ -115,3 +125,75 @@ export async function validateAssociation(input: ValidationInput): Promise<Valid
   return { valid: true }
 }
 
+interface VerifySignatureParams {
+  address: Hex
+  signature: Hex
+  keyType: number
+  aar: AssociatedAccountRecord
+  eip712Message: {
+    initiator: Hex
+    approver: Hex
+    validAt: number
+    validUntil: number
+    interfaceId: Hex
+    data: Hex
+  }
+  publicClient?: Erc1271Client
+}
+
+/**
+ * Verify a signature based on its key type.
+ * Supports:
+ * - EOA (K1/secp256k1) signatures
+ * - Smart contract (ERC-1271) signatures for deployed contracts
+ * - Counterfactual (ERC-6492) signatures for undeployed smart contract wallets
+ */
+async function verifySignature(params: VerifySignatureParams): Promise<boolean> {
+  const { address, signature, keyType, aar, eip712Message, publicClient } = params
+
+  // ERC-6492: Counterfactual smart contract wallet signature (undeployed)
+  if (keyType === KEY_TYPES.ERC6492) {
+    if (!publicClient) {
+      // Cannot validate ERC-6492 signature without a public client
+      return false
+    }
+
+    return verifyErc6492Signature(
+      publicClient,
+      getAddress(address),
+      aar,
+      signature
+    )
+  }
+
+  // ERC-1271: Smart contract wallet signature (deployed)
+  if (keyType === KEY_TYPES.ERC1271) {
+    if (!publicClient) {
+      // Cannot validate ERC-1271 signature without a public client
+      return false
+    }
+
+    return verifyErc1271Signature(
+      publicClient,
+      getAddress(address),
+      aar,
+      signature
+    )
+  }
+
+  // K1 (secp256k1): Standard EOA signature
+  // Also handle DELEGATED (0x0000) as EOA for backwards compatibility
+  if (keyType === KEY_TYPES.K1 || keyType === KEY_TYPES.DELEGATED) {
+    return verifyTypedData({
+      address: getAddress(address),
+      domain: EIP712_DOMAIN,
+      types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
+      primaryType: 'AssociatedAccountRecord',
+      message: eip712Message,
+      signature,
+    })
+  }
+
+  // Unsupported key type
+  return false
+}

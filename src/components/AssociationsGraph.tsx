@@ -150,6 +150,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
               sar: sarData,
               initiatorAddress: initiatorAddr as Hex,
               approverAddress: approverAddr as Hex,
+              publicClient,
             })
 
             return {
@@ -225,6 +226,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
               sar: sarData,
               initiatorAddress: dbAssoc.initiator_address as Hex,
               approverAddress: dbAssoc.approver_address as Hex,
+              publicClient,
             })
 
             return {
@@ -416,8 +418,10 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
         ? assoc.approver.toLowerCase()
         : assoc.initiator.toLowerCase()
 
-      let edgeType: 'onchain' | 'offchain' | 'invalid' = assoc.source
-      if (!assoc.isValid) {
+      let edgeType: 'onchain' | 'offchain' | 'invalid' | 'revoked' = assoc.source
+      if (assoc.revokedAt > 0n) {
+        edgeType = 'revoked'
+      } else if (!assoc.isValid) {
         edgeType = 'invalid'
       }
 
@@ -528,6 +532,22 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
           },
         },
         {
+          selector: 'edge[edgeType="revoked"]',
+          style: {
+            'line-color': '#ef4444',
+            'target-arrow-color': '#ef4444',
+            'label': '✕',
+            'text-background-color': '#0f0f15',
+            'text-background-opacity': 1,
+            'text-background-padding': '4px',
+            'font-size': '14px',
+            'font-weight': 'bold',
+            'color': '#ef4444',
+            'text-valign': 'center',
+            'text-halign': 'center',
+          },
+        },
+        {
           selector: 'edge:active',
           style: {
             'overlay-opacity': 0.2,
@@ -590,6 +610,10 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
               <span>Offchain</span>
             </div>
             <div className="legend-item">
+              <span className="legend-line revoked"></span>
+              <span>Revoked</span>
+            </div>
+            <div className="legend-item">
               <span className="legend-line invalid"></span>
               <span>Invalid</span>
             </div>
@@ -643,6 +667,10 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
           <div className="legend-item">
             <span className="legend-line offchain"></span>
             <span>Offchain</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-line revoked"></span>
+            <span>Revoked</span>
           </div>
           <div className="legend-item">
             <span className="legend-line invalid"></span>

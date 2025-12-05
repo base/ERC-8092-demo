@@ -606,6 +606,25 @@ body {
   cursor: not-allowed;
 }
 
+.secondary-btn {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.secondary-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: rgba(0, 212, 255, 0.05);
+}
+
 /* Transaction Status */
 .tx-status {
   margin-top: 0.75rem;
@@ -1258,8 +1277,35 @@ body {
   background: #6366f1;
 }
 
-.legend-line.invalid {
+.legend-line.revoked {
   background: #ef4444;
+  position: relative;
+  overflow: visible;
+}
+
+.legend-line.revoked::after {
+  content: '✕';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+  font-weight: bold;
+  color: #ef4444;
+  background: var(--bg-tertiary);
+  padding: 1px 3px;
+  line-height: 1;
+  border-radius: 2px;
+}
+
+.legend-line.invalid {
+  background: repeating-linear-gradient(
+    90deg,
+    #ef4444 0px,
+    #ef4444 4px,
+    transparent 4px,
+    transparent 7px
+  );
 }
 
 /* Graph Visualization (Cytoscape container) */
@@ -1445,4 +1491,40 @@ body {
   .graph-visualization {
     height: 240px;
   }
+}
+
+/* ===== Footer ===== */
+.site-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem 1rem;
+  margin-top: 3rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.github-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.github-link svg {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.github-link:hover svg {
+  opacity: 1;
 }

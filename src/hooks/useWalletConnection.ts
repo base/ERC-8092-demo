@@ -1,27 +1,27 @@
 'use client'
 
-import { useConnection, useConnect, useConnectors, useDisconnect, useSwitchChain } from 'wagmi'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
+import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { baseSepolia } from 'wagmi/chains'
+import { useSmartWallet } from './useSmartWallet'
 
 export function useWalletConnection() {
-  const connection = useConnection()
-  const { connect } = useConnect()
-  const connectors = useConnectors()
+  const { address, isConnected, chain } = useAccount()
   const { disconnect } = useDisconnect()
   const { switchChain } = useSwitchChain()
+  const { openConnectModal } = useConnectModal()
+  const { isSmartWallet } = useSmartWallet()
 
   // Derive connection state
-  const isConnected = connection.status === 'connected'
-  const address = connection.addresses?.[0]
-  const chainId = connection.chainId
-  const chainName = connection.chain?.name
-  const isWrongChain = isConnected && chainId !== baseSepolia.id
+  const chainId = chain?.id
+  const chainName = chain?.name
+  
+  // For smart wallets, don't show wrong chain warning since
+  // our EIP-712 domain doesn't include chainId (signatures are chain-agnostic)
+  const isWrongChain = isConnected && chainId !== baseSepolia.id && !isSmartWallet
 
   const handleConnect = () => {
-    const injected = connectors.find(c => c.id === 'injected') || connectors[0]
-    if (injected) {
-      connect({ connector: injected })
-    }
+    openConnectModal?.()
   }
 
   const handleDisconnect = () => {
@@ -38,9 +38,9 @@ export function useWalletConnection() {
     chainId,
     chainName,
     isWrongChain,
+    isSmartWallet,
     handleConnect,
     handleDisconnect,
     handleSwitchNetwork,
   }
 }
-

@@ -2,7 +2,14 @@ import { NextResponse } from 'next/server'
 import { sql, type DbAssociation } from '@/lib/db'
 import { extractAddress } from '@/lib/erc7930'
 import { validateAssociation } from '@/lib/validation'
-import { type Hex, verifyMessage } from 'viem'
+import { type Hex, verifyMessage, createPublicClient, http } from 'viem'
+import { baseSepolia } from 'viem/chains'
+
+// Create a public client for ERC-1271 signature validation
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(),
+})
 
 // Request body type for POST
 interface StoreAssociationRequest {
@@ -37,7 +44,7 @@ export async function POST(request: Request) {
     const initiatorAddress = extractAddress(aar.initiator)
     const approverAddress = extractAddress(aar.approver)
 
-    // ERC-8092 Validation
+    // ERC-8092 Validation (with ERC-1271 support for smart contract wallets)
     const validationResult = await validateAssociation({
       aar: {
         initiator: aar.initiator,
@@ -64,6 +71,7 @@ export async function POST(request: Request) {
       },
       initiatorAddress: initiatorAddress as Hex,
       approverAddress: approverAddress as Hex,
+      publicClient,
     })
 
     if (!validationResult.valid) {

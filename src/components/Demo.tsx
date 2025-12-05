@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { hashTypedData } from 'viem'
 import { ControlPanel } from './ControlPanel'
 import { 
   type FlowStep, 
@@ -9,6 +10,7 @@ import {
   createEmptyAAR,
   createEmptySAR 
 } from '@/lib/types'
+import { EIP712_DOMAIN, ASSOCIATED_ACCOUNT_RECORD_TYPES } from '@/lib/eip712'
 
 interface DemoProps {
   /** Externally controlled AAR (optional - will use internal state if not provided) */
@@ -33,6 +35,49 @@ export function Demo({ externalAar, externalSar, onAarChange, onSarChange, onWri
   // Use external state if provided, otherwise internal
   const aar = externalAar ?? internalAar
   const sar = externalSar ?? internalSar
+
+  // Debug: expose AAR/SAR to window for console debugging
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const win = window as any
+      const message = {
+        initiator: aar.initiator,
+        approver: aar.approver,
+        validAt: Number(aar.validAt),
+        validUntil: Number(aar.validUntil),
+        interfaceId: aar.interfaceId,
+        data: aar.data,
+      }
+      win.DEBUG = {
+        aar,
+        sar,
+        domain: EIP712_DOMAIN,
+        types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
+        message,
+        // Full EIP-712 typed data structure (JSON format wallets receive)
+        typedData: {
+          domain: EIP712_DOMAIN,
+          types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
+          primaryType: 'AssociatedAccountRecord',
+          message,
+        },
+        // Get JSON string of the typed data
+        getTypedDataJSON: () => JSON.stringify({
+          domain: EIP712_DOMAIN,
+          types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
+          primaryType: 'AssociatedAccountRecord',
+          message,
+        }, null, 2),
+        getTypedDataHash: () => hashTypedData({
+          domain: EIP712_DOMAIN,
+          types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
+          primaryType: 'AssociatedAccountRecord',
+          message,
+        }),
+      }
+    }
+  }, [aar, sar])
 
   const setAar = (newAar: AssociatedAccountRecord) => {
     if (onAarChange) {

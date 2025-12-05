@@ -462,7 +462,7 @@ export function ControlPanel({
 
         {flowStep === 'connect-approver' && (
           <div className="step-content">
-            <p>Switch to your second wallet using your wallet extension</p>
+            <p>Connect your Approver wallet</p>
             <div className="expected-address">
               <span className="expected-label">Expected address:</span>
               <span className="expected-value">
@@ -470,7 +470,18 @@ export function ControlPanel({
               </span>
               {isEnsName && <span className="ens-hint">({approverInput})</span>}
             </div>
-            <p className="hint">Waiting for wallet change...</p>
+            {isConnected ? (
+              <>
+                <p className="hint">Disconnect your initiator wallet first, then connect your approver wallet.</p>
+                <button onClick={handleDisconnect} className="secondary-btn">
+                  Disconnect Initiator
+                </button>
+              </>
+            ) : (
+              <button onClick={() => { onWriteActivity?.(); setAwaitingApproverConnect(true); handleConnect(); }} className="primary-btn">
+                Connect Approver Wallet
+              </button>
+            )}
           </div>
         )}
 
