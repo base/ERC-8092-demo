@@ -27,8 +27,15 @@ interface FullAssociation {
   sar: SignedAssociationRecord
 }
 
+export interface AssociationSelectData {
+  aar: AssociatedAccountRecord
+  sar: SignedAssociationRecord
+  source: 'onchain' | 'offchain'
+  id: string
+}
+
 interface AssociationsGraphProps {
-  onAssociationSelect?: (aar: AssociatedAccountRecord, sar: SignedAssociationRecord) => void
+  onAssociationSelect?: (data: AssociationSelectData) => void
   /** Increment to trigger a data refresh */
   refreshTrigger?: number
 }
@@ -54,6 +61,14 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
   const [ensNames, setEnsNames] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(false)
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
+  const [localRefreshCounter, setLocalRefreshCounter] = useState(0)
+
+  // Combined refresh trigger (external + local)
+  const combinedRefreshTrigger = refreshTrigger + localRefreshCounter
+
+  const handleRefresh = useCallback(() => {
+    setLocalRefreshCounter(c => c + 1)
+  }, [])
 
   // Handle search input - resolve ENS or validate address
   const handleSearch = useCallback(async () => {
@@ -177,7 +192,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     }
 
     fetchOnchainAssociations()
-  }, [targetAddress, publicClient, refreshTrigger])
+  }, [targetAddress, publicClient, combinedRefreshTrigger])
 
   // Fetch offchain associations from database
   useEffect(() => {
@@ -252,7 +267,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     }
 
     fetchOffchainAssociations()
-  }, [targetAddress, refreshTrigger])
+  }, [targetAddress, combinedRefreshTrigger])
 
   // Combine and deduplicate associations (onchain takes precedence)
   const mergedAssociations = useMemo(() => {
@@ -351,7 +366,12 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
   const handleEdgeClick = useCallback((edgeId: string) => {
     const assoc = associationMap.get(edgeId)
     if (assoc && onAssociationSelect) {
-      onAssociationSelect(assoc.aar, assoc.sar)
+      onAssociationSelect({
+        aar: assoc.aar,
+        sar: assoc.sar,
+        source: assoc.source,
+        id: assoc.id,
+      })
     }
   }, [associationMap, onAssociationSelect])
 
@@ -600,29 +620,38 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
               Search
             </button>
           </div>
-          <div className="graph-legend">
-            <div className="legend-item">
-              <span className="legend-line onchain"></span>
-              <span>Onchain</span>
-            </div>
-            <div className="legend-item">
-              <span className="legend-line offchain"></span>
-              <span>Offchain</span>
-            </div>
-            <div className="legend-item">
-              <span className="legend-line revoked"></span>
-              <span>Revoked</span>
-            </div>
-            <div className="legend-item">
-              <span className="legend-line invalid"></span>
-              <span>Invalid</span>
-            </div>
+        <div className="graph-header-actions">
+          <button 
+            className="refresh-btn" 
+            onClick={handleRefresh}
+            title="Refresh associations"
+          >
+            ↻
+          </button>
+        </div>
+        <div className="graph-legend">
+          <div className="legend-item">
+            <span className="legend-line onchain"></span>
+            <span>Onchain</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-line offchain"></span>
+            <span>Offchain</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-line revoked"></span>
+            <span>Revoked</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-line invalid"></span>
+            <span>Invalid</span>
           </div>
         </div>
-        <div className="graph-empty">
-          <p>Connect your wallet to view your associations</p>
-        </div>
       </div>
+      <div className="graph-empty">
+        <p>Connect your wallet to view your associations</p>
+      </div>
+    </div>
     )
   }
 
@@ -659,6 +688,16 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
             {isResolvingEns && <span className="search-status">Resolving...</span>}
           </div>
         )}
+        <div className="graph-header-actions">
+          <button 
+            className="refresh-btn" 
+            onClick={handleRefresh}
+            disabled={isLoading}
+            title="Refresh associations"
+          >
+            {isLoading ? '...' : '↻'}
+          </button>
+        </div>
         <div className="graph-legend">
           <div className="legend-item">
             <span className="legend-line onchain"></span>

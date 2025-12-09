@@ -25,9 +25,28 @@ interface DemoProps {
   onWriteActivity?: () => void
   /** Callback when association is stored (to refresh graph) */
   onStoreComplete?: (storageMethod: 'onchain' | 'database') => void
+  /** Callback when association is revoked (to refresh graph) */
+  onRevokeComplete?: () => void
+  /** Trigger to start revoke mode (increment to activate) */
+  revokeModeTrigger?: number
+  /** Source of the association to revoke */
+  revokeSource?: 'onchain' | 'offchain' | null
+  /** ID of the association to revoke */
+  revokeAssociationId?: string | null
 }
 
-export function Demo({ externalAar, externalSar, onAarChange, onSarChange, onWriteActivity, onStoreComplete }: DemoProps) {
+export function Demo({ 
+  externalAar, 
+  externalSar, 
+  onAarChange, 
+  onSarChange, 
+  onWriteActivity, 
+  onStoreComplete, 
+  onRevokeComplete,
+  revokeModeTrigger,
+  revokeSource,
+  revokeAssociationId,
+}: DemoProps) {
   const [flowStep, setFlowStep] = useState<FlowStep>('connect-initiator')
   const [internalAar, setInternalAar] = useState<AssociatedAccountRecord>(createEmptyAAR())
   const [internalSar, setInternalSar] = useState<SignedAssociationRecord>(createEmptySAR())
@@ -105,6 +124,10 @@ export function Demo({ externalAar, externalSar, onAarChange, onSarChange, onWri
       setSar={setSar}
       onWriteActivity={onWriteActivity}
       onStoreComplete={onStoreComplete}
+      onRevokeComplete={onRevokeComplete}
+      revokeModeTrigger={revokeModeTrigger}
+      revokeSource={revokeSource}
+      revokeAssociationId={revokeAssociationId}
     />
   )
 }

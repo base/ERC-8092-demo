@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   // Externalize Node.js-only packages to prevent bundling issues during SSR
   serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream'],
 
+  // Turbopack is enabled by default in Next.js 16
+  turbopack: {},
+
   webpack: (config) => {
     // Handle pino-pretty and other optional dependencies that WalletConnect/pino try to load
     config.resolve.fallback = {

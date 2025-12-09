@@ -9,6 +9,7 @@ interface UseDatabaseRevocationProps {
   sar: SignedAssociationRecord
   setSar: (sar: SignedAssociationRecord) => void
   setError: (error: string | null) => void
+  onSuccess?: () => void
 }
 
 interface UseDatabaseRevocationReturn {
@@ -22,6 +23,7 @@ export function useDatabaseRevocation({
   sar,
   setSar,
   setError,
+  onSuccess,
 }: UseDatabaseRevocationProps): UseDatabaseRevocationReturn {
   const { address } = useAccount()
   const { signMessageAsync } = useSignMessage()
@@ -78,6 +80,7 @@ export function useDatabaseRevocation({
         revokedAt: BigInt(timestamp),
       })
       setIsRevoked(true)
+      onSuccess?.()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       // Check for user rejection

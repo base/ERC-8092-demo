@@ -44,6 +44,7 @@ export type FlowStep =
   | 'sign-approver'
   | 'store-association'
   | 'complete'
+  | 'revoke-existing'
 
 // Helper to convert address to ERC-7930 format using interop-addresses library
 export function addressToErc7930(address: Address, chainId: number): Hex {

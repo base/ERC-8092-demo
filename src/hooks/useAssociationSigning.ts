@@ -28,7 +28,7 @@ export function useAssociationSigning({
 }: UseAssociationSigningProps) {
   const { signTypedDataAsync } = useSignTypedData()
   const { disconnect } = useDisconnect()
-  const { address, chain } = useAccount()
+  const { address, chain, connector } = useAccount()
   const { switchChainAsync } = useSwitchChain()
   const { isSmartWallet } = useSmartWallet()
   // Always use Base Sepolia for contract detection regardless of wallet's current chain
@@ -36,33 +36,110 @@ export function useAssociationSigning({
   const [isProcessing, setIsProcessing] = useState(false)
 
   /**
-   * Ensure wallet is connected to Base Sepolia before proceeding.
-   * For smart wallets that aren't deployed on Base Sepolia, we skip the switch
-   * since EIP-712 signatures without chainId are chain-agnostic.
+   * Get the chain ID to use for signing.
+   * For smart wallets, returns the connector's actual chain ID.
+   * For EOA wallets, ensures we're on Base Sepolia first.
+   * Returns null if we can't proceed.
    */
-  const ensureCorrectNetwork = async (): Promise<boolean> => {
-    // Smart wallets may not be deployed on Base Sepolia yet
-    // Since our EIP-712 domain doesn't include chainId, signatures are chain-agnostic
-    // Skip network switch for smart wallet connectors to avoid deployment issues
-    if (isSmartWallet) {
-      return true
+  const getSigningChainId = async (): Promise<number | null> => {
+    console.log('[useAssociationSigning] getSigningChainId:', { 
+      isSmartWallet, 
+      connectionChainId: chain?.id, 
+      targetChain: baseSepolia.id 
+    })
+    
+    // For smart wallets, get the connector's actual chain ID
+    // This avoids the ConnectorChainMismatchError by signing on the connector's chain
+    if (isSmartWallet && connector) {
+      try {
+        const connectorChainId = await connector.getChainId()
+        console.log('[useAssociationSigning] Smart wallet connector chain:', connectorChainId)
+        
+        // Try to sync wagmi's connection state (may fail for smart wallets)
+        if (chain?.id !== connectorChainId) {
+          try {
+            console.log('[useAssociationSigning] Attempting to sync connection to connector chain:', connectorChainId)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await switchChainAsync({ chainId: connectorChainId as any })
+          } catch {
+            // Switch failed, but we'll pass the connector's chain ID to sign anyway
+            console.log('[useAssociationSigning] Chain sync failed, will pass chainId directly to sign')
+          }
+        }
+        
+        // Return the connector's chain ID to use in signing
+        return connectorChainId
+      } catch (err) {
+        console.error('[useAssociationSigning] Failed to get connector chain:', err)
+        // Fall back to connection chain
+        return chain?.id ?? null
+      }
     }
 
+    // For EOA wallets, ensure we're on Base Sepolia
     if (chain?.id !== baseSepolia.id) {
       try {
         await switchChainAsync({ chainId: baseSepolia.id })
-        return true
+        return baseSepolia.id
       } catch (err) {
+        console.error('[useAssociationSigning] Network switch failed:', err)
         const errorMsg = err instanceof Error ? err.message : ''
         if (errorMsg.includes('does not match')) {
           setError('Please switch to Base Sepolia in your wallet app, or try connecting with a different wallet')
         } else {
           setError('Please switch to Base Sepolia network to continue')
         }
-        return false
+        return null
       }
     }
-    return true
+    return baseSepolia.id
+  }
+
+  /**
+   * Sign typed data directly using the connector's provider.
+   * This bypasses wagmi's chain validation which causes ConnectorChainMismatchError
+   * when the connection chain differs from the connector chain.
+   */
+  const signTypedDataDirect = async (): Promise<Hex> => {
+    if (!connector || !address) {
+      throw new Error('No connector or address available')
+    }
+
+    // Get the provider directly from the connector
+    const provider = await connector.getProvider()
+    
+    // Build the typed data request in eth_signTypedData_v4 format
+    // Must include EIP712Domain type explicitly
+    const typedData = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+        ],
+        ...ASSOCIATED_ACCOUNT_RECORD_TYPES,
+      },
+      primaryType: 'AssociatedAccountRecord',
+      domain: EIP712_DOMAIN,
+      message: {
+        initiator: aar.initiator,
+        approver: aar.approver,
+        validAt: Number(aar.validAt),
+        validUntil: Number(aar.validUntil),
+        interfaceId: aar.interfaceId,
+        data: aar.data,
+      },
+    }
+
+    console.log('[useAssociationSigning] Signing directly with connector provider')
+
+    // Use eth_signTypedData_v4 directly via the provider
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const signature = await (provider as any).request({
+      method: 'eth_signTypedData_v4',
+      params: [address, JSON.stringify(typedData)],
+    })
+
+    return signature as Hex
   }
 
   /**
@@ -107,26 +184,39 @@ export function useAssociationSigning({
     setIsProcessing(true)
     setError(null)
     try {
-      // Ensure wallet is on Base Sepolia (skipped for smart wallets)
-      const isCorrectNetwork = await ensureCorrectNetwork()
-      if (!isCorrectNetwork) {
-        setIsProcessing(false)
-        return
+      let signature: Hex
+
+      // For smart wallets, sign directly with the connector to bypass wagmi's chain validation
+      if (isSmartWallet && connector) {
+        console.log('[useAssociationSigning] Using direct signing for smart wallet initiator')
+        signature = await signTypedDataDirect()
+      } else {
+        // For EOA wallets, use wagmi's signTypedData (handles chain switching)
+        const signingChainId = await getSigningChainId()
+        if (signingChainId === null) {
+          setIsProcessing(false)
+          return
+        }
+        
+        console.log('[useAssociationSigning] Signing initiator with wagmi:', { 
+          signingChainId,
+          connectionChainId: chain?.id,
+        })
+        
+        signature = await signTypedDataAsync({
+          domain: EIP712_DOMAIN,
+          types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
+          primaryType: 'AssociatedAccountRecord' as const,
+          message: {
+            initiator: aar.initiator,
+            approver: aar.approver,
+            validAt: Number(aar.validAt),
+            validUntil: Number(aar.validUntil),
+            interfaceId: aar.interfaceId,
+            data: aar.data,
+          },
+        })
       }
-      
-      const signature = await signTypedDataAsync({
-        domain: EIP712_DOMAIN,
-        types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
-        primaryType: 'AssociatedAccountRecord',
-        message: {
-          initiator: aar.initiator,
-          approver: aar.approver,
-          validAt: Number(aar.validAt),
-          validUntil: Number(aar.validUntil),
-          interfaceId: aar.interfaceId,
-          data: aar.data,
-        },
-      })
 
       // Determine key type AFTER signing - this allows us to detect ERC-6492 wrapped signatures
       const keyType = await getKeyTypeForSignature(signature)
@@ -140,11 +230,16 @@ export function useAssociationSigning({
       disconnect()
       setFlowStep('connect-approver')
     } catch (err) {
+      console.error('[useAssociationSigning] Sign initiator error:', err, { isSmartWallet, chain })
       const msg = err instanceof Error ? err.message.toLowerCase() : ''
       if (msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')) {
         setError('User rejected the signature request')
-      } else if (msg.includes('does not match')) {
+      } else if (msg.includes('does not match') && !isSmartWallet) {
+        // Only suggest network switch for non-smart wallets
         setError('Please switch to Base Sepolia in your wallet app')
+      } else if (isSmartWallet && (msg.includes('does not match') || msg.includes('chain'))) {
+        // Smart wallet signing issue - provide more context
+        setError('Smart wallet signing failed. Try reconnecting or using a different chain in your wallet.')
       } else {
         setError(err instanceof Error ? err.message : 'Signing failed')
       }
@@ -157,26 +252,39 @@ export function useAssociationSigning({
     setIsProcessing(true)
     setError(null)
     try {
-      // Ensure wallet is on Base Sepolia (skipped for smart wallets)
-      const isCorrectNetwork = await ensureCorrectNetwork()
-      if (!isCorrectNetwork) {
-        setIsProcessing(false)
-        return
+      let signature: Hex
+
+      // For smart wallets, sign directly with the connector to bypass wagmi's chain validation
+      if (isSmartWallet && connector) {
+        console.log('[useAssociationSigning] Using direct signing for smart wallet approver')
+        signature = await signTypedDataDirect()
+      } else {
+        // For EOA wallets, use wagmi's signTypedData (handles chain switching)
+        const signingChainId = await getSigningChainId()
+        if (signingChainId === null) {
+          setIsProcessing(false)
+          return
+        }
+        
+        console.log('[useAssociationSigning] Signing approver with wagmi:', { 
+          signingChainId,
+          connectionChainId: chain?.id,
+        })
+        
+        signature = await signTypedDataAsync({
+          domain: EIP712_DOMAIN,
+          types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
+          primaryType: 'AssociatedAccountRecord' as const,
+          message: {
+            initiator: aar.initiator,
+            approver: aar.approver,
+            validAt: Number(aar.validAt),
+            validUntil: Number(aar.validUntil),
+            interfaceId: aar.interfaceId,
+            data: aar.data,
+          },
+        })
       }
-      
-      const signature = await signTypedDataAsync({
-        domain: EIP712_DOMAIN,
-        types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
-        primaryType: 'AssociatedAccountRecord',
-        message: {
-          initiator: aar.initiator,
-          approver: aar.approver,
-          validAt: Number(aar.validAt),
-          validUntil: Number(aar.validUntil),
-          interfaceId: aar.interfaceId,
-          data: aar.data,
-        },
-      })
 
       // Determine key type AFTER signing - this allows us to detect ERC-6492 wrapped signatures
       const keyType = await getKeyTypeForSignature(signature)
@@ -188,11 +296,16 @@ export function useAssociationSigning({
       })
       setFlowStep('store-association')
     } catch (err) {
+      console.error('[useAssociationSigning] Sign approver error:', err, { isSmartWallet, chain })
       const msg = err instanceof Error ? err.message.toLowerCase() : ''
       if (msg.includes('user rejected') || msg.includes('user denied') || msg.includes('rejected the request')) {
         setError('User rejected the signature request')
-      } else if (msg.includes('does not match')) {
+      } else if (msg.includes('does not match') && !isSmartWallet) {
+        // Only suggest network switch for non-smart wallets
         setError('Please switch to Base Sepolia in your wallet app')
+      } else if (isSmartWallet && (msg.includes('does not match') || msg.includes('chain'))) {
+        // Smart wallet signing issue - provide more context
+        setError('Smart wallet signing failed. Try reconnecting or using a different chain in your wallet.')
       } else {
         setError(err instanceof Error ? err.message : 'Signing failed')
       }

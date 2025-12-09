@@ -19,6 +19,14 @@ interface ControlPanelProps {
   onWriteActivity?: () => void
   /** Callback when association is stored (to refresh graph) */
   onStoreComplete?: (storageMethod: 'onchain' | 'database') => void
+  /** Callback when association is revoked (to refresh graph) */
+  onRevokeComplete?: () => void
+  /** Trigger to start revoke mode (increment to activate) */
+  revokeModeTrigger?: number
+  /** Source of the association to revoke */
+  revokeSource?: 'onchain' | 'offchain' | null
+  /** ID of the association to revoke */
+  revokeAssociationId?: string | null
 }
 
 export function ControlPanel({ 
@@ -29,7 +37,11 @@ export function ControlPanel({
   sar, 
   setSar,
   onWriteActivity,
-  onStoreComplete 
+  onStoreComplete,
+  onRevokeComplete,
+  revokeModeTrigger = 0,
+  revokeSource,
+  revokeAssociationId,
 }: ControlPanelProps) {
   // Local state
   const [approverInput, setApproverInput] = useState('')
@@ -40,6 +52,10 @@ export function ControlPanel({
   
   // Storage method selection
   const [storageMethod, setStorageMethod] = useState<'onchain' | 'database'>('onchain')
+  
+  // External association ID (for revoking existing associations)
+  const [externalAssociationId, setExternalAssociationId] = useState<string | null>(null)
+  const [isRevokingExisting, setIsRevokingExisting] = useState(false)
   
   // Optional AAR fields
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -115,6 +131,13 @@ export function ControlPanel({
     ? onchainAssociationId 
     : (dbAssociationId?.toString() ?? null)
 
+  // ENS resolution - if it's not a valid address, try to resolve it as an ENS name
+  const isEnsName = !isAddress(approverInput) && approverInput.length > 0
+  const { data: resolvedAddress, isLoading: isResolvingEns } = useEnsAddress({
+    name: isEnsName ? approverInput : undefined,
+    chainId: mainnet.id,
+  })
+
   // Onchain revocation (uses Hex association ID)
   const {
     revokeTxHash,
@@ -128,22 +151,21 @@ export function ControlPanel({
     setError,
   })
 
+  // Compute effective database association ID (from storage hook or external)
+  const effectiveDbAssociationId = isRevokingExisting && externalAssociationId?.startsWith('db-')
+    ? parseInt(externalAssociationId.replace('db-', ''), 10)
+    : dbAssociationId
+
   // Database revocation (uses numeric ID, requires signature)
   const {
     isRevoking: isDbRevoking,
     handleRevoke: handleDatabaseRevoke,
   } = useDatabaseRevocation({
-    associationId: dbAssociationId,
+    associationId: effectiveDbAssociationId,
     sar,
     setSar,
     setError,
-  })
-
-  // ENS resolution
-  const isEnsName = approverInput.includes('.') && !approverInput.startsWith('0x')
-  const { data: resolvedAddress, isLoading: isResolvingEns } = useEnsAddress({
-    name: isEnsName ? approverInput : undefined,
-    chainId: mainnet.id,
+    onSuccess: onRevokeComplete,
   })
 
   // The effective approver address (resolved ENS or raw input)
@@ -197,6 +219,18 @@ export function ControlPanel({
       onStoreComplete(storageMethod)
     }
   }, [flowStep, onStoreComplete, storageMethod])
+
+  // Handle revoke mode trigger from external (Read tab)
+  useEffect(() => {
+    if (revokeModeTrigger > 0 && revokeSource && revokeAssociationId) {
+      // Set up for revoking an existing association
+      setStorageMethod(revokeSource === 'onchain' ? 'onchain' : 'database')
+      setExternalAssociationId(revokeAssociationId)
+      setIsRevokingExisting(true)
+      setFlowStep('revoke-existing')
+      setError(null)
+    }
+  }, [revokeModeTrigger, revokeSource, revokeAssociationId, setFlowStep])
 
   const handleSubmitApprover = () => {
     if (!initiatorAddress) {
@@ -274,6 +308,8 @@ export function ControlPanel({
     setAwaitingInitiatorConnect(false)
     setAwaitingApproverConnect(false)
     setStorageMethod('onchain')
+    setExternalAssociationId(null)
+    setIsRevokingExisting(false)
     setAar({
       initiator: '0x',
       approver: '0x',
@@ -339,7 +375,7 @@ export function ControlPanel({
 
       {/* Flow Steps */}
       <div className="flow-section">
-        <h3>Step {getStepNumber(flowStep)} of 7</h3>
+        <h3>{flowStep === 'revoke-existing' ? 'Revoke Existing' : `Step ${getStepNumber(flowStep)} of 7`}</h3>
         
         {flowStep === 'connect-initiator' && (
           <div className="step-content">
@@ -605,6 +641,49 @@ export function ControlPanel({
             )}
           </div>
         )}
+
+        {flowStep === 'revoke-existing' && (
+          <div className="step-content">
+            <p>Revoke an existing association</p>
+            
+            {storageMethod === 'onchain' ? (
+              <div className="revoke-info">
+                <p className="warning-text">
+                  Onchain revocation from the Read tab is not yet supported. 
+                  Please use the normal flow to revoke onchain associations.
+                </p>
+                <button onClick={handleReset} className="secondary-btn">
+                  Start New Flow
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="revoke-info">
+                  <p className="info-text">
+                    You&apos;re about to revoke a database association. 
+                    This will require signing a message to prove your authority.
+                  </p>
+                </div>
+                
+                {!isConnected ? (
+                  <button onClick={handleConnect} className="primary-btn">
+                    Connect Wallet
+                  </button>
+                ) : sar.revokedAt > 0n ? (
+                  <p className="revoked">Association has been revoked</p>
+                ) : (
+                  <button 
+                    onClick={() => handleDatabaseRevoke()} 
+                    className="danger-btn"
+                    disabled={isDbRevoking}
+                  >
+                    {isDbRevoking ? 'Sign & Revoke...' : 'Revoke Association'}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Error Display */}
@@ -625,6 +704,9 @@ export function ControlPanel({
 }
 
 function getStepNumber(step: FlowStep): number {
+  // revoke-existing is a special flow, return a distinct number
+  if (step === 'revoke-existing') return 0
+  
   const steps: FlowStep[] = [
     'connect-initiator',
     'input-approver', 

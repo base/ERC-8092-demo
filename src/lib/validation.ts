@@ -3,7 +3,6 @@ import { EIP712_DOMAIN, ASSOCIATED_ACCOUNT_RECORD_TYPES } from './eip712'
 import type { AssociatedAccountRecord, SignedAssociationRecord } from './types'
 import { KEY_TYPES } from './types'
 import { verifyErc1271Signature, type Erc1271Client } from './erc1271'
-import { verifyErc6492Signature } from './erc6492'
 
 /**
  * ERC-8092 Validation
@@ -152,18 +151,27 @@ async function verifySignature(params: VerifySignatureParams): Promise<boolean> 
   const { address, signature, keyType, aar, eip712Message, publicClient } = params
 
   // ERC-6492: Counterfactual smart contract wallet signature (undeployed)
+  // Uses viem's built-in verifyTypedData which natively supports ERC-6492 signatures
+  // by detecting the magic suffix and using the Universal Signature Validator
   if (keyType === KEY_TYPES.ERC6492) {
-    if (!publicClient) {
-      // Cannot validate ERC-6492 signature without a public client
+    if (!publicClient?.verifyTypedData) {
+      // Cannot validate ERC-6492 signature without a public client with verifyTypedData
       return false
     }
 
-    return verifyErc6492Signature(
-      publicClient,
-      getAddress(address),
-      aar,
-      signature
-    )
+    try {
+      return await publicClient.verifyTypedData({
+        address: getAddress(address),
+        domain: EIP712_DOMAIN,
+        types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
+        primaryType: 'AssociatedAccountRecord',
+        message: eip712Message,
+        signature,
+      })
+    } catch {
+      // Verification failed
+      return false
+    }
   }
 
   // ERC-1271: Smart contract wallet signature (deployed)

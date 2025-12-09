@@ -15,6 +15,8 @@ export interface Erc1271Client {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   call: (args: any) => Promise<any>
   getCode: (args: { address: Address }) => Promise<Hex | undefined>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  verifyTypedData?: (args: any) => Promise<boolean>
 }
 
 // ERC-1271 ABI for isValidSignature

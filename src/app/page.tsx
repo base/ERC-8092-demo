@@ -2,8 +2,10 @@
 
 import { useState, useCallback } from 'react'
 import { Demo } from '@/components/Demo'
-import { AssociationsGraph } from '@/components/AssociationsGraph'
+import { AssociationsGraph, type AssociationSelectData } from '@/components/AssociationsGraph'
 import { RecordDisplay } from '@/components/RecordDisplay'
+import { useWalletConnection } from '@/hooks'
+import { extractAddress } from '@/lib/erc7930'
 import { 
   type AssociatedAccountRecord, 
   type SignedAssociationRecord,
@@ -14,6 +16,9 @@ import {
 type TabMode = 'write' | 'read'
 
 export default function Home() {
+  // Wallet connection for checking if user can revoke
+  const { isConnected, address: connectedAddress } = useWalletConnection()
+  
   // Active tab state
   const [activeTab, setActiveTab] = useState<TabMode>('write')
   
@@ -24,9 +29,14 @@ export default function Home() {
   // Completely separate state for read mode (viewing existing associations)
   const [readAar, setReadAar] = useState<AssociatedAccountRecord>(createEmptyAAR())
   const [readSar, setReadSar] = useState<SignedAssociationRecord>(createEmptySAR())
+  const [readSource, setReadSource] = useState<'onchain' | 'offchain' | null>(null)
+  const [readAssociationId, setReadAssociationId] = useState<string | null>(null)
   
   // Graph refresh trigger - increment to cause refetch
   const [graphRefreshTrigger, setGraphRefreshTrigger] = useState(0)
+  
+  // Trigger to start revoke flow in ControlPanel
+  const [revokeModeTrigger, setRevokeModeTrigger] = useState(0)
 
   const scrollToDemo = () => {
     const demoSection = document.getElementById('demo-section')
@@ -36,9 +46,11 @@ export default function Home() {
   }
 
   // Handle association selection from the graph - switches to read tab
-  const handleAssociationSelect = useCallback((selectedAar: AssociatedAccountRecord, selectedSar: SignedAssociationRecord) => {
-    setReadAar(selectedAar)
-    setReadSar(selectedSar)
+  const handleAssociationSelect = useCallback((data: AssociationSelectData) => {
+    setReadAar(data.aar)
+    setReadSar(data.sar)
+    setReadSource(data.source)
+    setReadAssociationId(data.id)
     setActiveTab('read')
   }, [])
 
@@ -57,6 +69,42 @@ export default function Home() {
       setGraphRefreshTrigger(prev => prev + 1)
     }, delay)
   }, [])
+
+  // Handle revoke completion - refresh graph
+  const handleRevokeComplete = useCallback(() => {
+    // Short delay to ensure database has updated
+    setTimeout(() => {
+      setGraphRefreshTrigger(prev => prev + 1)
+    }, 500)
+  }, [])
+
+  // Handle initiating revoke from read tab
+  const handleInitiateRevoke = useCallback(() => {
+    if (!readSource || !readAssociationId) return
+    
+    // Copy read state to write state
+    setWriteAar(readAar)
+    setWriteSar(readSar)
+    
+    // Switch to write tab and trigger revoke mode
+    setActiveTab('write')
+    setRevokeModeTrigger(prev => prev + 1)
+  }, [readAar, readSar, readSource, readAssociationId])
+
+  // Check if user can revoke the current read association
+  const canRevoke = useCallback(() => {
+    if (!isConnected || !connectedAddress || !readAar.initiator || readAar.initiator === '0x') {
+      return false
+    }
+    if (readSar.revokedAt > 0n) {
+      return false // Already revoked
+    }
+    // Check if connected address is initiator or approver
+    const initiatorAddr = extractAddress(readAar.initiator)?.toLowerCase()
+    const approverAddr = extractAddress(readAar.approver)?.toLowerCase()
+    const connected = connectedAddress.toLowerCase()
+    return connected === initiatorAddr || connected === approverAddr
+  }, [isConnected, connectedAddress, readAar, readSar])
 
   // Get the current AAR/SAR based on active tab
   const displayAar = activeTab === 'write' ? writeAar : readAar
@@ -135,6 +183,10 @@ export default function Home() {
                 onSarChange={setWriteSar}
                 onWriteActivity={handleWriteActivity}
                 onStoreComplete={handleStoreComplete}
+                onRevokeComplete={handleRevokeComplete}
+                revokeModeTrigger={revokeModeTrigger}
+                revokeSource={readSource}
+                revokeAssociationId={readAssociationId}
               />
             </aside>
             
@@ -166,6 +218,32 @@ export default function Home() {
                 {activeTab === 'read' && readAar.initiator === '0x' && (
                   <div className="read-tab-hint">
                     <p>Click an association in the graph below to view its details</p>
+                  </div>
+                )}
+                
+                {/* Revoke button for read tab */}
+                {activeTab === 'read' && readAar.initiator !== '0x' && (
+                  <div className="read-tab-actions">
+                    {readSar.revokedAt > 0n ? (
+                      <div className="revoked-badge">
+                        <span>✕</span> This association has been revoked
+                      </div>
+                    ) : canRevoke() ? (
+                      <button 
+                        onClick={handleInitiateRevoke}
+                        className="revoke-from-read-btn"
+                      >
+                        Revoke This Association
+                      </button>
+                    ) : isConnected ? (
+                      <div className="cannot-revoke-hint">
+                        Connect with initiator or approver wallet to revoke
+                      </div>
+                    ) : (
+                      <div className="cannot-revoke-hint">
+                        Connect wallet to revoke this association
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
