@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   title: 'ERC-8092 Demo | Associated Accounts',
   description: 'Interactive demo for ERC-8092 Associated Accounts standard',
   icons: {
-    apple: [],
+    icon: '/favicon.ico',
   },
 }
 
