@@ -70,6 +70,8 @@ export function ControlPanel({
     chainId,
     chainName,
     isWrongChain,
+    isSmartWallet,
+    isSwitchingChain,
     handleConnect,
     handleDisconnect,
     handleSwitchNetwork,
@@ -199,6 +201,20 @@ export function ControlPanel({
       setFlowStep('input-approver')
     }
   }, [flowStep, isConnected, address, awaitingInitiatorConnect, setFlowStep, setAar, aar])
+
+  // Update initiator if wallet changes before signing (e.g., user disconnects and connects different wallet)
+  useEffect(() => {
+    if (flowStep === 'input-approver' && isConnected && address && initiatorAddress) {
+      // If the connected address is different from the stored initiator, update it
+      if (address.toLowerCase() !== initiatorAddress.toLowerCase()) {
+        setInitiatorAddress(address)
+        setAar({
+          ...aar,
+          initiator: addressToErc7930(address, baseSepolia.id),
+        })
+      }
+    }
+  }, [flowStep, isConnected, address, initiatorAddress, setAar, aar])
 
   // Handle approver connection - only validate after we see a NEW connection
   useEffect(() => {
@@ -337,7 +353,6 @@ export function ControlPanel({
 
   return (
     <div className="control-panel">
-      <h2>Controls</h2>
       
       {/* Connection Status */}
       <div className="status-section">
@@ -347,7 +362,7 @@ export function ControlPanel({
             {isConnected ? 'Connected' : 'Disconnected'}
           </span>
         </div>
-        {isConnected && (
+        {isConnected ? (
           <>
             <div className="status-item">
               <span className="label">Address:</span>
@@ -355,12 +370,16 @@ export function ControlPanel({
             </div>
             <div className="status-item">
               <span className="label">Chain:</span>
-              <span className={`value ${chainId === baseSepolia.id ? 'correct-chain' : 'wrong-chain'}`}>
-                {chainId === baseSepolia.id ? 'Base Sepolia' : (chainName || `Chain ${chainId}`)}
+              <span className={`value ${(isSmartWallet || chainId === baseSepolia.id) ? 'correct-chain' : isSwitchingChain ? 'switching-chain' : 'wrong-chain'}`}>
+                {isSwitchingChain 
+                  ? 'Switching to Base Sepolia...' 
+                  : (isSmartWallet || chainId === baseSepolia.id)
+                    ? 'Base Sepolia' 
+                    : (chainName || `Chain ${chainId}`)}
               </span>
             </div>
             <div className="wallet-actions">
-              {isWrongChain && (
+              {isWrongChain && !isSwitchingChain && (
                 <button onClick={handleSwitchNetwork} className="switch-network-btn">
                   Switch to Base Sepolia
                 </button>
@@ -370,6 +389,12 @@ export function ControlPanel({
               </button>
             </div>
           </>
+        ) : (
+          <div className="wallet-actions">
+            <button onClick={() => { onWriteActivity?.(); handleConnect(); }} className="primary-btn">
+              Connect Wallet
+            </button>
+          </div>
         )}
       </div>
 
@@ -379,10 +404,7 @@ export function ControlPanel({
         
         {flowStep === 'connect-initiator' && (
           <div className="step-content">
-            <p>Connect your Initiator wallet</p>
-            <button onClick={() => { onWriteActivity?.(); handleConnect(); }} className="primary-btn">
-              Connect Wallet
-            </button>
+            <p>Connect your Initiator wallet to get started</p>
           </div>
         )}
 

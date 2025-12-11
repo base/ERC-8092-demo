@@ -368,6 +368,10 @@ body {
   color: var(--warning);
 }
 
+.status-item .value.switching-chain {
+  color: var(--accent-secondary);
+}
+
 .wallet-actions {
   display: flex;
   gap: 0.5rem;

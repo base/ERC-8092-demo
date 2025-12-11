@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { baseSepolia } from 'wagmi/chains'
@@ -8,7 +9,7 @@ import { useSmartWallet } from './useSmartWallet'
 export function useWalletConnection() {
   const { address, isConnected, chain } = useAccount()
   const { disconnect } = useDisconnect()
-  const { switchChain } = useSwitchChain()
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
   const { openConnectModal } = useConnectModal()
   const { isSmartWallet } = useSmartWallet()
 
@@ -16,9 +17,16 @@ export function useWalletConnection() {
   const chainId = chain?.id
   const chainName = chain?.name
   
-  // For smart wallets, don't show wrong chain warning since
-  // our EIP-712 domain doesn't include chainId (signatures are chain-agnostic)
+  // For smart wallets, don't show wrong chain warning/button since
+  // we auto-switch for them. Only show for EOA wallets.
   const isWrongChain = isConnected && chainId !== baseSepolia.id && !isSmartWallet
+
+  // Auto-switch network for smart wallets when they connect
+  useEffect(() => {
+    if (isSmartWallet) {
+      switchChain({ chainId: baseSepolia.id })
+    }
+  }, [address, isSmartWallet, switchChain])
 
   const handleConnect = () => {
     openConnectModal?.()
@@ -39,6 +47,7 @@ export function useWalletConnection() {
     chainName,
     isWrongChain,
     isSmartWallet,
+    isSwitchingChain,
     handleConnect,
     handleDisconnect,
     handleSwitchNetwork,
