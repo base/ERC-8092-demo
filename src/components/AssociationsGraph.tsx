@@ -522,6 +522,8 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
           style: {
             'width': 2,
             'curve-style': 'bezier',
+            'source-arrow-shape': 'triangle',
+            'source-arrow-color': '#22c55e',
             'target-arrow-shape': 'triangle',
             'target-arrow-color': '#22c55e',
             'line-color': '#22c55e',
@@ -532,6 +534,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
           selector: 'edge[edgeType="onchain"]',
           style: {
             'line-color': '#22c55e',
+            'source-arrow-color': '#22c55e',
             'target-arrow-color': '#22c55e',
           },
         },
@@ -539,6 +542,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
           selector: 'edge[edgeType="offchain"]',
           style: {
             'line-color': '#6366f1',
+            'source-arrow-color': '#6366f1',
             'target-arrow-color': '#6366f1',
           },
         },
@@ -546,6 +550,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
           selector: 'edge[edgeType="invalid"]',
           style: {
             'line-color': '#ef4444',
+            'source-arrow-color': '#ef4444',
             'target-arrow-color': '#ef4444',
             'line-style': 'dashed',
             'line-dash-pattern': [6, 4],
@@ -555,6 +560,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
           selector: 'edge[edgeType="revoked"]',
           style: {
             'line-color': '#ef4444',
+            'source-arrow-color': '#ef4444',
             'target-arrow-color': '#ef4444',
             'label': '✕',
             'text-background-color': '#0f0f15',
