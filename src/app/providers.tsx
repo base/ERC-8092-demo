@@ -5,7 +5,7 @@ import '@rainbow-me/rainbowkit/styles.css'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { type State, WagmiProvider, http } from 'wagmi'
-import { base, baseSepolia, mainnet } from 'wagmi/chains'
+import { baseSepolia } from 'wagmi/chains'
 
 // Singleton pattern to prevent multiple WalletConnect Core initializations
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,13 +16,11 @@ function getConfig() {
     config = getDefaultConfig({
       appName: 'ERC-8092 Demo',
       projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'ffff890acd298e25d2bc1580ff98b810',
-      // Include Base mainnet for smart wallet support
-      chains: [baseSepolia, base, mainnet],
+      chains: [baseSepolia],
       ssr: true,
       transports: {
-        [baseSepolia.id]: http(),
-        [base.id]: http(),
-        [mainnet.id]: http(),
+        // Provide public RPC URL as fallback in case wallet doesn't have Base Sepolia configured
+        [baseSepolia.id]: http('https://sepolia.base.org'),
       },
     })
   }
