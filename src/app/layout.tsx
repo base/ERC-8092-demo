@@ -16,6 +16,28 @@ export const metadata: Metadata = {
   icons: {
     icon: '/favicon.ico',
   },
+  openGraph: {
+    title: 'ERC-8092 Demo | Associated Accounts',
+    description: 'Interactive demo for ERC-8092: Associated Accounts',
+    url: 'https://erc8092.xyz',
+    siteName: 'ERC-8092 Demo',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 322,
+        height: 348,
+        alt: 'ERC-8092 Associated Accounts Demo',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ERC-8092 Demo | Associated Accounts',
+    description: 'Interactive demo for ERC-8092 Associated Accounts standard',
+    images: ['/og-image.png'],
+  },
 }
 
 export default async function RootLayout(props: { children: ReactNode }) {
