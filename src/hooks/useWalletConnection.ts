@@ -11,34 +11,26 @@ export function useWalletConnection() {
   const { disconnect } = useDisconnect()
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
   const { openConnectModal } = useConnectModal()
-  const { isSmartWallet } = useSmartWallet()
+  const { isSmartWallet, isBaseAccount, isLoading } = useSmartWallet()
 
-  // Derive connection state
   const chainId = chain?.id
   const chainName = chain?.name
-  
-  // For smart wallets, don't show wrong chain warning/button since
-  // we auto-switch for them. Only show for EOA wallets.
-  const isWrongChain = isConnected && chainId !== baseSepolia.id && !isSmartWallet
 
-  // Auto-switch network for smart wallets when they connect
+  // For smart wallets, we handle chain switching automatically.
+  // Only show "wrong chain" UI for EOA wallets that need manual switching.
+  // While loading capabilities, don't show the button (might be a smart wallet).
+  const isWrongChain = isConnected && 
+    chainId !== baseSepolia.id && 
+    !isSmartWallet && 
+    !isBaseAccount && 
+    !isLoading
+
+  // Auto-switch to Base Sepolia for smart wallets
   useEffect(() => {
-    if (isSmartWallet) {
+    if ((isSmartWallet || isBaseAccount) && chainId !== baseSepolia.id) {
       switchChain({ chainId: baseSepolia.id })
     }
-  }, [address, isSmartWallet, switchChain])
-
-  const handleConnect = () => {
-    openConnectModal?.()
-  }
-
-  const handleDisconnect = () => {
-    disconnect()
-  }
-
-  const handleSwitchNetwork = () => {
-    switchChain({ chainId: baseSepolia.id })
-  }
+  }, [isSmartWallet, isBaseAccount, chainId, switchChain])
 
   return {
     isConnected,
@@ -47,9 +39,10 @@ export function useWalletConnection() {
     chainName,
     isWrongChain,
     isSmartWallet,
+    isBaseAccount,
     isSwitchingChain,
-    handleConnect,
-    handleDisconnect,
-    handleSwitchNetwork,
+    handleConnect: () => openConnectModal?.(),
+    handleDisconnect: () => disconnect(),
+    handleSwitchNetwork: () => switchChain({ chainId: baseSepolia.id }),
   }
 }
