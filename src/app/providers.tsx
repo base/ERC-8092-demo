@@ -5,7 +5,7 @@ import '@rainbow-me/rainbowkit/styles.css'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { type State, WagmiProvider, http } from 'wagmi'
-import { baseSepolia } from 'wagmi/chains'
+import { baseSepolia, mainnet } from 'wagmi/chains'
 
 // Singleton pattern to prevent multiple WalletConnect Core initializations
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,11 +16,13 @@ function getConfig() {
     config = getDefaultConfig({
       appName: 'ERC-8092 Demo',
       projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'ffff890acd298e25d2bc1580ff98b810',
-      chains: [baseSepolia],
+      // mainnet included for ENS resolution
+      chains: [baseSepolia, mainnet],
       ssr: true,
       transports: {
-        // Provide public RPC URL as fallback in case wallet doesn't have Base Sepolia configured
+        // Provide public RPC URLs as fallbacks in case wallet doesn't have these networks configured
         [baseSepolia.id]: http('https://sepolia.base.org'),
+        [mainnet.id]: http('https://eth.llamarpc.com'),
       },
     })
   }

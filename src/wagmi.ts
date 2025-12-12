@@ -1,11 +1,12 @@
 import { cookieStorage, createConfig, createStorage, http } from 'wagmi'
-import { baseSepolia } from 'wagmi/chains'
+import { baseSepolia, mainnet } from 'wagmi/chains'
 
 // Server-safe config for cookieToInitialState (no RainbowKit connectors)
 // This must have the same chains and transports as the client config in providers.tsx
 export function getConfig() {
   return createConfig({
-    chains: [baseSepolia],
+    // mainnet included for ENS resolution
+    chains: [baseSepolia, mainnet],
     storage: createStorage({
       storage: cookieStorage,
     }),
@@ -13,6 +14,7 @@ export function getConfig() {
     transports: {
       // Provide public RPC URLs as fallbacks in case wallet doesn't have these networks configured
       [baseSepolia.id]: http('https://sepolia.base.org'),
+      [mainnet.id]: http('https://eth.llamarpc.com'),
     },
   })
 }
