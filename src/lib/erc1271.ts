@@ -5,6 +5,9 @@ import type { AssociatedAccountRecord } from './types'
 // ERC-1271 magic value returned for valid signatures
 export const ERC1271_MAGIC_VALUE = '0x1626ba7e' as const
 
+// [SECURITY PATCH]: Maximum gas allowed for an ERC-1271 signature check to prevent RPC DoS / Gas Griefing
+export const ERC1271_GAS_LIMIT = 100_000n
+
 /**
  * Minimal client interface for ERC-1271/6492 signature validation.
  * This is compatible with both viem's PublicClient and wagmi's usePublicClient return type.
@@ -52,7 +55,7 @@ export async function isSmartContract(
 export async function verifyErc1271Signature(
   client: Erc1271Client,
   contractAddress: Address,
-  aar: AssociatedAccountRecord,
+  aar: AssociatedAccountRecord & { nonce?: bigint | number }, // Ensure nonce compatibility
   signature: Hex
 ): Promise<boolean> {
   // Compute the EIP-712 hash of the AAR
@@ -67,20 +70,22 @@ export async function verifyErc1271Signature(
       validUntil: Number(aar.validUntil),
       interfaceId: aar.interfaceId,
       data: aar.data,
+      nonce: aar.nonce ?? 0n, // [SECURITY PATCH]: Propagate nonce into the hash digest
     },
   })
 
   try {
-    const result = await client.readContract({
+    const result = (await client.readContract({
       address: getAddress(contractAddress),
       abi: erc1271Abi,
       functionName: 'isValidSignature',
       args: [hash, signature],
-    })
+      gas: ERC1271_GAS_LIMIT, // [SECURITY PATCH]: Enforce gas limit to prevent infinite loops
+    })) as Hex
 
     return result === ERC1271_MAGIC_VALUE
   } catch {
-    // Contract call failed - signature is invalid or contract doesn't implement ERC-1271
+    // Contract call failed - signature is invalid, contract doesn't implement ERC-1271, or out of gas
     return false
   }
 }
