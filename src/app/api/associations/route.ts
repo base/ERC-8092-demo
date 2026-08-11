@@ -20,6 +20,7 @@ interface StoreAssociationRequest {
     validUntil: string
     interfaceId: Hex
     data: Hex
+    nonce: string // [SECURITY PATCH]: Added nonce for replay protection
   }
   sar: {
     revokedAt: string
@@ -40,6 +41,23 @@ export async function POST(request: Request) {
     const body: StoreAssociationRequest = await request.json()
     const { aar, sar } = body
 
+    // [SECURITY PATCH]: Validate and parse nonce
+    const nonceBigInt = BigInt(aar.nonce ?? '0')
+
+    // [SECURITY PATCH]: Replay Attack Prevention - Check if this nonce was already used by the initiator
+    const initiatorAddressCheck = extractAddress(aar.initiator)
+    const existingNonceCheck = await sql`
+      SELECT id FROM associations 
+      WHERE initiator_address = ${initiatorAddressCheck} AND nonce = ${nonceBigInt}
+      LIMIT 1
+    `
+    if (existingNonceCheck.length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Nonce already used. Replay attack detected.' },
+        { status: 400 }
+      )
+    }
+
     // Extract addresses from ERC-7930 format
     const initiatorAddress = extractAddress(aar.initiator)
     const approverAddress = extractAddress(aar.approver)
@@ -53,6 +71,7 @@ export async function POST(request: Request) {
         validUntil: BigInt(aar.validUntil),
         interfaceId: aar.interfaceId,
         data: aar.data,
+        nonce: nonceBigInt, // [SECURITY PATCH]: Passed nonce to validation
       },
       sar: {
         revokedAt: BigInt(sar.revokedAt),
@@ -67,6 +86,7 @@ export async function POST(request: Request) {
           validUntil: BigInt(aar.validUntil),
           interfaceId: aar.interfaceId,
           data: aar.data,
+          nonce: nonceBigInt, // [SECURITY PATCH]: Passed nonce to record structure
         },
       },
       initiatorAddress: initiatorAddress as Hex,
@@ -93,7 +113,7 @@ export async function POST(request: Request) {
       ON CONFLICT (address) DO NOTHING
     `
 
-    // Insert the association
+    // Insert the association (including nonce)
     const result = await sql`
       INSERT INTO associations (
         initiator_address,
@@ -108,7 +128,8 @@ export async function POST(request: Request) {
         initiator_key_type,
         approver_key_type,
         initiator_signature,
-        approver_signature
+        approver_signature,
+        nonce
       ) VALUES (
         ${initiatorAddress},
         ${approverAddress},
@@ -122,7 +143,8 @@ export async function POST(request: Request) {
         ${formatKeyType(sar.initiatorKeyType)},
         ${formatKeyType(sar.approverKeyType)},
         ${sar.initiatorSignature},
-        ${sar.approverSignature}
+        ${sar.approverSignature},
+        ${nonceBigInt}
       )
       RETURNING id
     `
@@ -290,4 +312,3 @@ export async function PATCH(request: Request) {
     )
   }
 }
-
