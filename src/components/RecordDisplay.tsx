@@ -5,7 +5,7 @@ import type { AssociatedAccountRecord, SignedAssociationRecord } from '@/lib/typ
 import { aarToJson, sarToJson, copyToClipboard } from '@/lib/serialize'
 
 interface RecordDisplayProps {
-  aar: AssociatedAccountRecord
+  aar: AssociatedAccountRecord & { nonce?: bigint | number } // [FEATURE]: Added nonce support for UI display
   sar: SignedAssociationRecord
 }
 
@@ -91,6 +91,13 @@ export function RecordDisplay({ aar, sar }: RecordDisplayProps) {
             type="bytes"
             isEmpty={aar.data === '0x'}
             isOptional
+          />
+          {/* [FEATURE]: Display the nonce to reflect the Replay Attack patch implemented in API/Contracts */}
+          <RecordField 
+            label="nonce" 
+            value={aar.nonce?.toString() || '0'} 
+            type="uint256"
+            isEmpty={aar.nonce === undefined}
           />
         </div>
       </div>
@@ -198,6 +205,9 @@ function RecordField({
     return date.toLocaleString()
   }
 
+  // [SECURITY NOTE]: Truncation is safe here as React natively escapes `{}` bindings. 
+  // If future features require hex-to-utf8 decoding (e.g. rendering metadata JSON from `aar.data`),
+  // DO NOT use dangerouslySetInnerHTML. Always pass the decoded string through DOMPurify first.
   const truncateValue = (v: string): string => {
     if (v.length <= 20) return v
     return `${v.slice(0, 10)}...${v.slice(-8)}`
