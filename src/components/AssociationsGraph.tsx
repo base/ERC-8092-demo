@@ -12,6 +12,16 @@ import { addressToErc7930, type AssociatedAccountRecord, type SignedAssociationR
 import { validateAssociation } from '@/lib/validation'
 import type { DbAssociation } from '@/lib/db'
 
+// [SECURITY PATCH]: Strict Hex Validator
+// Prevents XSS payloads (e.g., <script> tags) disguised as strings within the database 
+// from propagating into the application state. Enforces strict hexadecimal structure.
+const sanitizeHex = (value: any, fallback: Hex = '0x'): Hex => {
+  if (typeof value === 'string' && /^0x[0-9a-fA-F]*$/.test(value)) {
+    return value as Hex
+  }
+  return fallback
+}
+
 interface FullAssociation {
   id: string
   initiator: string
@@ -22,7 +32,6 @@ interface FullAssociation {
   source: 'onchain' | 'offchain'
   isValid: boolean
   invalidReason?: string
-  // Full record data for populating the visualization
   aar: AssociatedAccountRecord
   sar: SignedAssociationRecord
 }
@@ -36,7 +45,6 @@ export interface AssociationSelectData {
 
 interface AssociationsGraphProps {
   onAssociationSelect?: (data: AssociationSelectData) => void
-  /** Increment to trigger a data refresh */
   refreshTrigger?: number
 }
 
@@ -44,33 +52,35 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
   const { isConnected, address: connectedAddress } = useWalletConnection()
   const publicClient = usePublicClient({ chainId: baseSepolia.id })
   const mainnetClient = usePublicClient({ chainId: mainnet.id })
+  
   const containerRef = useRef<HTMLDivElement>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
   
-  // Search mode state
+  // Search state management
   const [searchMode, setSearchMode] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [searchAddress, setSearchAddress] = useState<string | null>(null)
   const [isResolvingEns, setIsResolvingEns] = useState(false)
   
-  // The address to query associations for
+  // Target resolution (Search override vs Connected Wallet)
   const targetAddress = searchMode && searchAddress ? searchAddress : connectedAddress
   
   const [onchainAssociations, setOnchainAssociations] = useState<FullAssociation[]>([])
   const [offchainAssociations, setOffchainAssociations] = useState<FullAssociation[]>([])
   const [ensNames, setEnsNames] = useState<Map<string, string>>(new Map())
+  
   const [isLoading, setIsLoading] = useState(false)
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
   const [localRefreshCounter, setLocalRefreshCounter] = useState(0)
 
-  // Combined refresh trigger (external + local)
+  // Aggregated trigger for both local UI actions and parent component signals
   const combinedRefreshTrigger = refreshTrigger + localRefreshCounter
 
   const handleRefresh = useCallback(() => {
     setLocalRefreshCounter(c => c + 1)
   }, [])
 
-  // Handle search input - resolve ENS or validate address
+  // Normalizes input into a valid Ethereum Address (direct or via ENS resolution)
   const handleSearch = useCallback(async () => {
     if (!searchInput.trim()) {
       setSearchAddress(null)
@@ -79,13 +89,11 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
 
     const input = searchInput.trim()
 
-    // Check if it's already a valid address
     if (isAddress(input)) {
       setSearchAddress(input.toLowerCase())
       return
     }
 
-    // Try to resolve as ENS name
     if (input.includes('.') && mainnetClient) {
       setIsResolvingEns(true)
       try {
@@ -102,13 +110,13 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     }
   }, [searchInput, mainnetClient])
 
-  // Debounced search
+  // Debounce search input to prevent aggressive RPC polling
   useEffect(() => {
     const timer = setTimeout(handleSearch, 500)
     return () => clearTimeout(timer)
   }, [handleSearch])
 
-  // Reset search when toggling mode
+  // Clear search context when explicitly leaving search mode
   useEffect(() => {
     if (!searchMode) {
       setSearchInput('')
@@ -116,7 +124,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     }
   }, [searchMode])
 
-  // Fetch onchain associations using getAssociationsForAccount
+  // Phase 1: Fetch On-chain Associations
   useEffect(() => {
     if (!targetAddress || !publicClient) {
       setOnchainAssociations([])
@@ -142,6 +150,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
             const initiatorAddr = extractAddress(sar.record.initiator as Hex)
             const approverAddr = extractAddress(sar.record.approver as Hex)
 
+            // Structuring validated on-chain AAR
             const aarData: AssociatedAccountRecord = {
               initiator: sar.record.initiator as Hex,
               approver: sar.record.approver as Hex,
@@ -194,7 +203,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     fetchOnchainAssociations()
   }, [targetAddress, publicClient, combinedRefreshTrigger])
 
-  // Fetch offchain associations from database
+  // Phase 2: Fetch Off-chain Associations with Strict Input Sanitization
   useEffect(() => {
     if (!targetAddress) {
       setOffchainAssociations([])
@@ -215,12 +224,16 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
             const validAt = BigInt(dbAssoc.valid_at)
             const validUntil = dbAssoc.valid_until ? BigInt(dbAssoc.valid_until) : 0n
             const revokedAt = dbAssoc.revoked_at ? BigInt(dbAssoc.revoked_at) : 0n
-            const interfaceId = (dbAssoc.interface_id || '0x00000000') as Hex
-            const dataField = (dbAssoc.data || '0x') as Hex
+            
+            // [SECURITY PATCH]: Enforce strict Hex types on all externally provided database fields
+            const interfaceId = sanitizeHex(dbAssoc.interface_id, '0x00000000')
+            const dataField = sanitizeHex(dbAssoc.data, '0x')
+            const initiatorBytes = sanitizeHex(dbAssoc.initiator_bytes, '0x')
+            const approverBytes = sanitizeHex(dbAssoc.approver_bytes, '0x')
 
             const aarData: AssociatedAccountRecord = {
-              initiator: dbAssoc.initiator_bytes as Hex,
-              approver: dbAssoc.approver_bytes as Hex,
+              initiator: initiatorBytes,
+              approver: approverBytes,
               validAt,
               validUntil,
               interfaceId,
@@ -231,8 +244,8 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
               revokedAt,
               initiatorKeyType: parseInt(dbAssoc.initiator_key_type, 16),
               approverKeyType: parseInt(dbAssoc.approver_key_type, 16),
-              initiatorSignature: dbAssoc.initiator_signature as Hex,
-              approverSignature: dbAssoc.approver_signature as Hex,
+              initiatorSignature: sanitizeHex(dbAssoc.initiator_signature, '0x'),
+              approverSignature: sanitizeHex(dbAssoc.approver_signature, '0x'),
               record: aarData,
             }
 
@@ -269,7 +282,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     fetchOffchainAssociations()
   }, [targetAddress, combinedRefreshTrigger])
 
-  // Combine and deduplicate associations (onchain takes precedence)
+  // Merge datasets, prioritizing on-chain sources over off-chain database records
   const mergedAssociations = useMemo(() => {
     const pairMap = new Map<string, FullAssociation>()
 
@@ -288,7 +301,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     return Array.from(pairMap.values())
   }, [onchainAssociations, offchainAssociations])
 
-  // Create a map from association ID to full association for click handling
+  // Lookup map for fast graph interaction handling
   const associationMap = useMemo(() => {
     const map = new Map<string, FullAssociation>()
     for (const assoc of mergedAssociations) {
@@ -297,7 +310,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     return map
   }, [mergedAssociations])
 
-  // Collect all unique addresses for ENS resolution
+  // Extract unique addresses to batch ENS resolution
   const allAddresses = useMemo(() => {
     const addresses = new Set<string>()
     if (targetAddress) {
@@ -310,7 +323,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     return Array.from(addresses)
   }, [targetAddress, mergedAssociations])
 
-  // Fetch ENS names for all addresses
+  // Batch resolve ENS names for graph labels
   useEffect(() => {
     if (!mainnetClient || allAddresses.length === 0) {
       return
@@ -331,7 +344,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
               nameMap.set(addr.toLowerCase(), name)
             }
           } catch {
-            // ENS resolution failed
+            // Silently fallback to raw address if ENS resolution fails
           }
         })
       )
@@ -342,7 +355,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     fetchEnsNames()
   }, [mainnetClient, allAddresses])
 
-  // Helper to get display name (ENS or truncated address)
+  // Format labels for Cytoscape (Truncates ENS or constructs standard 0x...0000 format)
   const getDisplayName = useCallback((addr: string): string => {
     const ensName = ensNames.get(addr.toLowerCase())
     if (ensName) {
@@ -351,7 +364,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }, [ensNames])
 
-  // Handle node click - copy address
+  // Node interaction handler (Copies resolved address to clipboard)
   const handleNodeClick = useCallback(async (nodeId: string) => {
     try {
       await navigator.clipboard.writeText(nodeId)
@@ -362,7 +375,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     }
   }, [])
 
-  // Handle edge click - select association
+  // Edge interaction handler (Emits selected record data upstream)
   const handleEdgeClick = useCallback((edgeId: string) => {
     const assoc = associationMap.get(edgeId)
     if (assoc && onAssociationSelect) {
@@ -375,7 +388,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     }
   }, [associationMap, onAssociationSelect])
 
-  // Build Cytoscape elements with positions
+  // Layout architecture & Element payload for Cytoscape Canvas
   const elements = useMemo(() => {
     if (!targetAddress || mergedAssociations.length === 0) {
       return []
@@ -387,7 +400,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     const edges: cytoscape.ElementDefinition[] = []
     const otherAddresses: string[] = []
 
-    // Collect other addresses first
+    // Aggregate secondary nodes
     for (const assoc of mergedAssociations) {
       const otherAddr = assoc.initiator.toLowerCase() === targetLower
         ? assoc.approver.toLowerCase()
@@ -398,13 +411,13 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
       }
     }
 
-    // Calculate positions
+    // Geometry calculations for static layout
     const containerHeight = 280
     const leftX = 120
     const rightX = 450
     const centerY = containerHeight / 2
 
-    // Add target wallet node on the left
+    // Primary target node injection
     nodes.push({
       data: {
         id: targetLower,
@@ -415,7 +428,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
       position: { x: leftX, y: centerY },
     })
 
-    // Add other nodes on the right
+    // Secondary nodes spatial distribution
     const nodeCount = otherAddresses.length
     const verticalSpacing = Math.min(80, (containerHeight - 60) / Math.max(nodeCount, 1))
     const startY = centerY - ((nodeCount - 1) * verticalSpacing) / 2
@@ -432,7 +445,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
       })
     })
 
-    // Add edges
+    // Edge synthesis based on cryptographic validity and domain source
     for (const assoc of mergedAssociations) {
       const otherAddr = assoc.initiator.toLowerCase() === targetLower
         ? assoc.approver.toLowerCase()
@@ -460,7 +473,7 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     return [...nodes, ...edges]
   }, [targetAddress, mergedAssociations, getDisplayName])
 
-  // Initialize and update Cytoscape
+  // Canvas Instance Management
   useEffect(() => {
     if (!containerRef.current || elements.length === 0) {
       if (cyRef.current) {
@@ -588,7 +601,6 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
       autoungrabify: true,
     })
 
-    // Add click handlers
     cy.on('tap', 'node', (evt) => {
       const nodeId = evt.target.id()
       handleNodeClick(nodeId)
@@ -607,7 +619,6 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
     }
   }, [elements, handleNodeClick, handleEdgeClick])
 
-  // Render empty state when not connected and not in search mode
   if (!isConnected && !searchMode) {
     return (
       <div className="graph-container">
@@ -724,7 +735,6 @@ export function AssociationsGraph({ onAssociationSelect, refreshTrigger = 0 }: A
         </div>
       </div>
 
-      {/* Copy notification */}
       {copiedAddress && (
         <div className="copy-notification">
           Copied {getDisplayName(copiedAddress)}!

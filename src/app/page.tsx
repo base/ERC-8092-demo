@@ -17,28 +17,29 @@ import {
 type TabMode = 'write' | 'read'
 
 export default function Home() {
-  // Wallet connection for checking if user can revoke
+  // Wallet connection state to determine revocation permissions
   const { isConnected, address: connectedAddress } = useWalletConnection()
   
-  // Active tab state
+  // Tab navigation state
   const [activeTab, setActiveTab] = useState<TabMode>('write')
   
-  // Completely separate state for write mode (creating new associations)
+  // Independent state management for the 'write' mode (creating associations)
   const [writeAar, setWriteAar] = useState<AssociatedAccountRecord>(createEmptyAAR())
   const [writeSar, setWriteSar] = useState<SignedAssociationRecord>(createEmptySAR())
   
-  // Completely separate state for read mode (viewing existing associations)
+  // Independent state management for the 'read' mode (inspecting associations)
   const [readAar, setReadAar] = useState<AssociatedAccountRecord>(createEmptyAAR())
   const [readSar, setReadSar] = useState<SignedAssociationRecord>(createEmptySAR())
   const [readSource, setReadSource] = useState<'onchain' | 'offchain' | null>(null)
   const [readAssociationId, setReadAssociationId] = useState<string | null>(null)
   
-  // Graph refresh trigger - increment to cause refetch
+  // Trigger mechanism to force a re-fetch in the AssociationsGraph component
   const [graphRefreshTrigger, setGraphRefreshTrigger] = useState(0)
   
-  // Trigger to start revoke flow in ControlPanel
+  // Trigger mechanism to initiate the revocation flow within the ControlPanel
   const [revokeModeTrigger, setRevokeModeTrigger] = useState(0)
 
+  // Smooth scroll handler for the hero section CTA
   const scrollToDemo = () => {
     const demoSection = document.getElementById('demo-section')
     if (demoSection) {
@@ -46,7 +47,7 @@ export default function Home() {
     }
   }
 
-  // Handle association selection from the graph - switches to read tab
+  // Callback triggered when a node/edge is clicked in the Cytoscape graph
   const handleAssociationSelect = useCallback((data: AssociationSelectData) => {
     setReadAar(data.aar)
     setReadSar(data.sar)
@@ -55,59 +56,57 @@ export default function Home() {
     setActiveTab('read')
   }, [])
 
-  // Handle write activity from Demo - switches to write tab
+  // Callback to force switch to write tab when user interacts with the Demo panel
   const handleWriteActivity = useCallback(() => {
     if (activeTab !== 'write') {
       setActiveTab('write')
     }
   }, [activeTab])
 
-  // Handle store completion - refresh graph after delay
+  // Lifecycle hook for successful storage operations (triggers graph refresh)
   const handleStoreComplete = useCallback((storageMethod: 'onchain' | 'database') => {
-    // Delay refresh to allow for block inclusion (longer for onchain)
+    // Delay accommodates block confirmation times vs immediate DB writes
     const delay = storageMethod === 'onchain' ? 3000 : 500
     setTimeout(() => {
       setGraphRefreshTrigger(prev => prev + 1)
     }, delay)
   }, [])
 
-  // Handle revoke completion - refresh graph
+  // Lifecycle hook for successful revocation (triggers graph refresh)
   const handleRevokeComplete = useCallback(() => {
-    // Short delay to ensure database has updated
     setTimeout(() => {
       setGraphRefreshTrigger(prev => prev + 1)
     }, 500)
   }, [])
 
-  // Handle initiating revoke from read tab
+  // Bootstraps the revocation workflow by copying read state to write state
   const handleInitiateRevoke = useCallback(() => {
     if (!readSource || !readAssociationId) return
     
-    // Copy read state to write state
     setWriteAar(readAar)
     setWriteSar(readSar)
     
-    // Switch to write tab and trigger revoke mode
     setActiveTab('write')
     setRevokeModeTrigger(prev => prev + 1)
   }, [readAar, readSar, readSource, readAssociationId])
 
-  // Check if user can revoke the current read association
+  // Validates whether the currently connected wallet has authorization to revoke the active record
   const canRevoke = useCallback(() => {
     if (!isConnected || !connectedAddress || !readAar.initiator || readAar.initiator === '0x') {
       return false
     }
     if (readSar.revokedAt > 0n) {
-      return false // Already revoked
+      return false // Record is already invalidated
     }
-    // Check if connected address is initiator or approver
+    
     const initiatorAddr = extractAddress(readAar.initiator)?.toLowerCase()
     const approverAddr = extractAddress(readAar.approver)?.toLowerCase()
     const connected = connectedAddress.toLowerCase()
+    
     return connected === initiatorAddr || connected === approverAddr
   }, [isConnected, connectedAddress, readAar, readSar])
 
-  // Get the current AAR/SAR based on active tab
+  // Context-aware state resolution for the RecordDisplay component
   const displayAar = activeTab === 'write' ? writeAar : readAar
   const displaySar = activeTab === 'write' ? writeSar : readSar
 
@@ -175,7 +174,7 @@ export default function Home() {
         
         <div className="demo-container">
           <div className="demo-panels">
-            {/* Left panel: Control Panel (always shows write controls) */}
+            {/* Left panel: Interactive control surface */}
             <aside className="left-panel">
               <Demo 
                 externalAar={writeAar}
@@ -191,10 +190,9 @@ export default function Home() {
               />
             </aside>
             
-            {/* Right panel: Tabbed AAR/SAR display */}
+            {/* Right panel: Data visualization and tabbed interface */}
             <main className="right-panel">
               <div className="record-panel-box">
-                {/* Tab buttons */}
                 <div className="record-tabs">
                   <button 
                     className={`record-tab ${activeTab === 'write' ? 'active' : ''}`}
@@ -212,17 +210,15 @@ export default function Home() {
                   </button>
                 </div>
                 
-                {/* Record display shows data based on active tab */}
+                {/* Dynamically renders AAR/SAR based on the active tab context */}
                 <RecordDisplay aar={displayAar} sar={displaySar} />
                 
-                {/* Read tab hint when empty */}
                 {activeTab === 'read' && readAar.initiator === '0x' && (
                   <div className="read-tab-hint">
                     <p>Click an association in the graph below to view its details</p>
                   </div>
                 )}
                 
-                {/* Revoke button for read tab */}
                 {activeTab === 'read' && readAar.initiator !== '0x' && (
                   <div className="read-tab-actions">
                     {readSar.revokedAt > 0n ? (
