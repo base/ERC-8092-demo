@@ -15,11 +15,12 @@ export const ASSOCIATED_ACCOUNT_RECORD_TYPES = {
     { name: 'validUntil', type: 'uint40' },
     { name: 'interfaceId', type: 'bytes4' },
     { name: 'data', type: 'bytes' },
+    { name: 'nonce', type: 'uint256' }, // [SECURITY PATCH]: Added nonce field to prevent replay attacks
   ],
 } as const
 
 // Convert AAR to EIP-712 message format
-export function aarToEip712Message(aar: AssociatedAccountRecord) {
+export function aarToEip712Message(aar: AssociatedAccountRecord & { nonce?: bigint | number }) {
   return {
     initiator: aar.initiator,
     approver: aar.approver,
@@ -27,11 +28,12 @@ export function aarToEip712Message(aar: AssociatedAccountRecord) {
     validUntil: aar.validUntil,
     interfaceId: aar.interfaceId,
     data: aar.data,
+    nonce: aar.nonce ?? 0n, // [SECURITY PATCH]: Bound nonce to the EIP-712 message payload
   }
 }
 
 // Get typed data for signing
-export function getTypedDataForAAR(aar: AssociatedAccountRecord) {
+export function getTypedDataForAAR(aar: AssociatedAccountRecord & { nonce?: bigint | number }) {
   return {
     domain: EIP712_DOMAIN,
     types: ASSOCIATED_ACCOUNT_RECORD_TYPES,
@@ -39,4 +41,3 @@ export function getTypedDataForAAR(aar: AssociatedAccountRecord) {
     message: aarToEip712Message(aar),
   }
 }
-
